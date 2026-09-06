@@ -4,8 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Bitácora de Campo Mtto Preventivo</title>
-  <!-- jsPDF para generación de PDF con texto real -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <style>
     :root{
       --bg:#0d0f14; --card:#191c24; --card2:#212531; --line:#2d3340;
@@ -1036,7 +1034,6 @@ function construirContenidoHoja(state, opts){
   const horas = state.horaInicio && state.horaFin ? round1((new Date(state.horaFin)-new Date(state.horaInicio))/3600000) : '';
   const generadoTxt = new Date().toLocaleString('es-CO');
 
-  // Estilos específicos para el modal de hoja (se inyectarán en un <style>)
   const styleBlock = `
   *{box-sizing:border-box;margin:0;padding:0}
   .hc-header{display:flex;align-items:center;gap:8px;margin-bottom:8px;padding-bottom:6px;border-bottom:3px solid #1a1a2e}
@@ -1183,7 +1180,6 @@ function recalcularTotalContingencia(){
 function generarHojaContingencia(){
   const contenedor = document.getElementById('hoja-contingencia-contenido');
   const { styleBlock, body } = construirContenidoHoja(STATE, {editable:true});
-  // Limpiamos y agregamos estilos + contenido
   contenedor.innerHTML = '';
   const style = document.createElement('style');
   style.textContent = styleBlock;
@@ -1191,7 +1187,6 @@ function generarHojaContingencia(){
   const div = document.createElement('div');
   div.innerHTML = body;
   contenedor.appendChild(div);
-  // Reasignar funciones globales para los botones dinámicos
   window.agregarTramoOffline = agregarTramoOffline;
   window.recalcularTotalContingencia = recalcularTotalContingencia;
   abrirModal('modal-hoja-contingencia');
@@ -1282,127 +1277,44 @@ async function confirmarCierreDefinitivo(){
   setTimeout(reiniciarApp, 2000);
 }
 
-// Generación de PDF con jsPDF (texto real, sin capturas de pantalla)
+// Generación de PDF mediante impresión nativa (iframe oculto)
 async function generarPDFCierre() {
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'letter' });
-  
-  // Datos
-  const fecha = STATE.horaInicio ? new Date(STATE.horaInicio).toLocaleDateString('es-CO') : new Date().toLocaleDateString('es-CO');
-  const turno = STATE.horaInicio ? (new Date(STATE.horaInicio).getHours() >= 6 && new Date(STATE.horaInicio).getHours() < 18 ? 'Diurno' : 'Nocturno') : '';
-  const mlTotal = calcularMLTotal();
-  const horas = STATE.horaInicio && STATE.horaFin ? round1((new Date(STATE.horaFin)-new Date(STATE.horaInicio))/3600000) : 0;
-  const m3Total = STATE.m3Total || 0;
-  
-  // Título
-  doc.setFontSize(16);
-  doc.setFont('helvetica', 'bold');
-  doc.text('HOJA DE CONTINGENCIA - JORNADA', 105, 15, { align: 'center' });
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'normal');
-  doc.text(`Generada: ${new Date().toLocaleString('es-CO')}`, 105, 20, { align: 'center' });
-  
-  // Nota importante
-  doc.setFontSize(9);
-  doc.setTextColor(255, 107, 53);
-  doc.setFont('helvetica', 'bold');
-  doc.text('IMPORTANTE - Dinámica de tramos:', 15, 30);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(0, 0, 0);
-  doc.text('Los tramos marcados como "Apto CCTV / LIMPIO" quedaron limpios y podrán ser', 15, 35);
-  doc.text('inspeccionados por el equipo CCTV. Los marcados como "No apto CCTV / NO LIMPIO"', 15, 39);
-  doc.text('no quedaron limpios y no podrán ser inspeccionados hasta trabajo adicional.', 15, 43);
-  
-  // Datos del turno
-  let y = 55;
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'bold');
-  doc.text('Datos del turno', 15, y);
-  doc.setFont('helvetica', 'normal');
-  y += 6;
-  const datosTurno = [
-    ['Fecha:', fecha],
-    ['Placa:', STATE.placa || '—'],
-    ['Jornada:', turno],
-    ['Barrio:', STATE.barrio || '—'],
-    ['Inspector:', STATE.inspector || '—'],
-    ['Hora inicio:', STATE.horaInicio ? fmtHora24(STATE.horaInicio) : '—'],
-    ['Hora fin:', STATE.horaFin ? fmtHora24(STATE.horaFin) : '—']
-  ];
-  datosTurno.forEach(([label, valor]) => {
-    doc.setFont('helvetica', 'bold');
-    doc.text(label, 15, y);
-    doc.setFont('helvetica', 'normal');
-    doc.text(valor, 45, y);
-    y += 5;
-  });
-  
-  // Tramos
-  y += 4;
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'bold');
-  doc.text('Tramos registrados', 15, y);
-  y += 5;
-  doc.setFontSize(9);
-  if (STATE.tramos.length === 0) {
-    doc.setFont('helvetica', 'normal');
-    doc.text('Sin tramos', 15, y);
-  } else {
-    // Encabezado de tabla
-    doc.setFont('helvetica', 'bold');
-    doc.text('#', 15, y);
-    doc.text('Código', 25, y);
-    doc.text('Hora', 55, y);
-    doc.text('Resultado', 80, y);
-    y += 4;
-    STATE.tramos.forEach((t, i) => {
-      doc.setFont('helvetica', 'normal');
-      doc.text(String(i+1), 15, y);
-      doc.text('#' + t.tramo, 25, y);
-      doc.text(t.horaInicio ? fmtHora24(t.horaInicio) : '', 55, y);
-      let resultado = '';
-      if (t.cierre) {
-        if (t.cierre.apto === 'SI') resultado = `LIMPIO -> ${t.cierre.ml} ML -> CCTV puede inspeccionar`;
-        else if (t.cierre.apto === 'NO') resultado = `NO LIMPIO -> ${t.cierre.obs || 'Sin observación'}`;
-        else resultado = `Cerrado por novedad -> ${t.cierre.obs || ''}`;
-      } else {
-        resultado = 'SIN CERRAR';
-      }
-      // Ajustar para que no se salga de la página
-      const maxWidth = 100;
-      const lines = doc.splitTextToSize(resultado, maxWidth);
-      doc.text(lines, 80, y);
-      y += Math.max(lines.length * 4, 4);
-    });
-  }
-  
-  // Cierre
-  y += 6;
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'bold');
-  doc.text('Cierre', 15, y);
-  y += 6;
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
-  doc.text(`ML total (tramos limpios): ${mlTotal} ML`, 15, y);
-  y += 5;
-  doc.text(`Horas: ${horas} h`, 15, y);
-  y += 5;
-  doc.text(`M3: ${m3Total} m³`, 15, y);
-  y += 5;
-  doc.setFont('helvetica', 'bold');
-  doc.text(mlTotal >= META_ML ? 'Meta cumplida' : 'No cumplida', 15, y);
-  
-  // Firmas
-  y += 10;
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
-  doc.text('Firma: ______________________', 15, y);
-  doc.text('Este documento es respaldo del cierre.', 130, y);
-  
-  // Guardar PDF
-  doc.save(`Cierre_Jornada_${STATE.placa}_${new Date().toISOString().slice(0,10)}.pdf`);
-  toast('✅ PDF generado correctamente');
+  const { styleBlock, body } = construirContenidoHoja(STATE, { editable: false });
+
+  const fullHtml = `<!DOCTYPE html>
+  <html>
+  <head>
+    <meta charset="UTF-8">
+    <title>Cierre de Jornada ${STATE.placa}</title>
+    <style>${styleBlock}</style>
+  </head>
+  <body>${body}</body>
+  </html>`;
+
+  const iframe = document.createElement('iframe');
+  iframe.style.position = 'fixed';
+  iframe.style.right = '0';
+  iframe.style.bottom = '0';
+  iframe.style.width = '0';
+  iframe.style.height = '0';
+  iframe.style.border = '0';
+  document.body.appendChild(iframe);
+
+  const iframeDoc = iframe.contentWindow.document;
+  iframeDoc.open();
+  iframeDoc.write(fullHtml);
+  iframeDoc.close();
+
+  iframe.contentWindow.onafterprint = () => {
+    setTimeout(() => {
+      document.body.removeChild(iframe);
+    }, 500);
+  };
+
+  setTimeout(() => {
+    iframe.contentWindow.focus();
+    iframe.contentWindow.print();
+  }, 300);
 }
 
 /* ==================== REINICIAR APP ==================== */
