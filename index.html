@@ -4,7 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Bitácora de Campo Mtto Preventivo</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" integrity="sha512-GsLlZN/3F2ErC5ifS5QtgpiJtWd43JWSuIgh7mbzZ8zBps+dvLusV+eNQATqgA/HdeKFVgA5v3S/cIrLF7QnIg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <!-- jsPDF para generación de PDF con texto real -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <style>
     :root{
       --bg:#0d0f14; --card:#191c24; --card2:#212531; --line:#2d3340;
@@ -154,7 +155,7 @@
       margin-bottom: 10px;
     }
     
-    /* Hoja de contingencia - campos offline */
+    /* Hoja de contingencia - campos offline (dentro del modal) */
     .offline-tramo-entry {
       border: 1px dashed var(--line);
       border-radius: 8px;
@@ -291,6 +292,16 @@
     <h3>📋 Bitácora acumulada</h3>
     <div class="clipboard-box" id="bitacora-completa-text"></div>
     <button class="btn" onclick="copiarBitacoraCompleta()">📋 Copiar todo</button>
+  </div>
+</div>
+
+<!-- MODAL: HOJA DE CONTINGENCIA (INTERNO) -->
+<div class="overlay" id="ov-hoja-contingencia">
+  <div class="modal">
+    <button class="modal-close" onclick="cerrarModal('modal-hoja-contingencia')">✕</button>
+    <h3>📄 Hoja de Contingencia</h3>
+    <div id="hoja-contingencia-contenido"></div>
+    <button class="btn secondary" onclick="window.print()">🖨️ Imprimir / Guardar PDF</button>
   </div>
 </div>
 
@@ -945,7 +956,8 @@ async function confirmarCierreTramo(){
 /* ==================== MODALES ==================== */
 const MODAL_MAP = {
   'modal-desob':'ov-desob', 'modal-m3':'ov-m3', 'modal-novedad':'ov-novedad',
-  'modal-cierre-tramo':'ov-cierre-tramo', 'modal-bitacora':'ov-bitacora', 'modal-confirmar-cierre':'ov-confirmar-cierre'
+  'modal-cierre-tramo':'ov-cierre-tramo', 'modal-bitacora':'ov-bitacora', 
+  'modal-confirmar-cierre':'ov-confirmar-cierre', 'modal-hoja-contingencia':'ov-hoja-contingencia'
 };
 function abrirModal(id){ 
   document.getElementById(MODAL_MAP[id]).classList.add('active'); 
@@ -978,12 +990,7 @@ function copiarBitacoraCompleta(){
   }
 }
 
-/* ==================== PLANTILLA ÚNICA: HOJA DE CONTINGENCIA ====================
-   Esta función construye el MISMO formato/HTML que se usa tanto para:
-   1) La hoja de contingencia editable (ventana emergente, captura manual offline)
-   2) El PDF de cierre de jornada (descarga automática al cerrar)
-   Así se elimina la duplicación y ambos documentos siempre coinciden.
-===================================================================== */
+/* ==================== HOJA DE CONTINGENCIA (MODAL INTERNO) ==================== */
 function construirFilasTramos(tramos, editable){
   let filas = tramos.map((t,i)=>{
     const apto = t.cierre ? t.cierre.apto : null;
@@ -1029,10 +1036,9 @@ function construirContenidoHoja(state, opts){
   const horas = state.horaInicio && state.horaFin ? round1((new Date(state.horaFin)-new Date(state.horaInicio))/3600000) : '';
   const generadoTxt = new Date().toLocaleString('es-CO');
 
+  // Estilos específicos para el modal de hoja (se inyectarán en un <style>)
   const styleBlock = `
-  @page{size:letter;margin:6mm}
   *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:Inter,Arial,sans-serif;background:#fff;padding:10mm 8mm;color:#1a1a1a;}
   .hc-header{display:flex;align-items:center;gap:8px;margin-bottom:8px;padding-bottom:6px;border-bottom:3px solid #1a1a2e}
   .hc-header-icon{width:35px;height:35px;background:#1a1a2e;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px;color:#fff;}
   .hc-header-title{font-size:14px;font-weight:800;color:#1a1a2e}
@@ -1058,8 +1064,6 @@ function construirContenidoHoja(state, opts){
   .offline-tramo-entry .entry-field label{font-size:10px;color:#666;margin:0 0 2px;display:block;}
   .offline-tramo-entry .entry-field input, .offline-tramo-entry .entry-field select{width:100%;font-size:12px;padding:6px;border:1px solid #d8d8de;border-radius:5px;font-family:inherit;}
   .btn-add-offline-tramo{background:#fff;color:#ff6b35;border:1px dashed #ff6b35;border-radius:8px;padding:9px;width:100%;font-weight:700;cursor:pointer;margin-top:6px;font-family:inherit;font-size:12px;}
-  .btn-imprimir{background:#ff6b35;color:#fff;border:none;padding:12px 24px;border-radius:20px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:10px}
-  @media print{.btn-imprimir,.btn-add-offline-tramo,.entry-remove{display:none !important;}}
   .editable-hint{font-size:9px;color:#888;margin-top:4px;text-align:center;border-top:1px dashed #ccc;padding-top:4px;}
   `;
 
@@ -1134,7 +1138,7 @@ function construirContenidoHoja(state, opts){
       <div>Firma: ______________________</div>
       <div>Este documento es respaldo del cierre.</div>
     </div>
-    ${editable ? '<div class="editable-hint">✏️ Todos los campos son editables directamente. Use imprimir para guardar como PDF.</div><button class="btn-imprimir" onclick="window.print()">🖨️ Imprimir / Guardar PDF</button>' : ''}
+    ${editable ? '<div class="editable-hint">✏️ Todos los campos son editables directamente. Use imprimir para guardar como PDF.</div>' : ''}
   `;
 
   return { styleBlock, body };
@@ -1176,14 +1180,21 @@ function recalcularTotalContingencia(){
   if(totalInput) totalInput.value = total;
 }
 
-/* ==================== HOJA DE CONTINGENCIA (ventana editable) ==================== */
 function generarHojaContingencia(){
-  const ventana = window.open('', '_blank', 'width=900,height=1200');
+  const contenedor = document.getElementById('hoja-contingencia-contenido');
   const { styleBlock, body } = construirContenidoHoja(STATE, {editable:true});
-  ventana.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Hoja de Contingencia</title><style>${styleBlock}</style></head><body>${body}
-  <script>window.agregarTramoOffline=${agregarTramoOffline.toString()};window.recalcularTotalContingencia=${recalcularTotalContingencia.toString()};<\/script>
-  </body></html>`);
-  ventana.document.close();
+  // Limpiamos y agregamos estilos + contenido
+  contenedor.innerHTML = '';
+  const style = document.createElement('style');
+  style.textContent = styleBlock;
+  contenedor.appendChild(style);
+  const div = document.createElement('div');
+  div.innerHTML = body;
+  contenedor.appendChild(div);
+  // Reasignar funciones globales para los botones dinámicos
+  window.agregarTramoOffline = agregarTramoOffline;
+  window.recalcularTotalContingencia = recalcularTotalContingencia;
+  abrirModal('modal-hoja-contingencia');
 }
 
 /* ==================== CIERRE JORNADA ==================== */
@@ -1271,58 +1282,127 @@ async function confirmarCierreDefinitivo(){
   setTimeout(reiniciarApp, 2000);
 }
 
+// Generación de PDF con jsPDF (texto real, sin capturas de pantalla)
 async function generarPDFCierre() {
-  // Usa la MISMA plantilla que la hoja de contingencia (modo no editable, con los datos ya congelados).
-  const { styleBlock, body } = construirContenidoHoja(STATE, {editable:false});
-
-  // Contenedor visible fuera de la pantalla (NO usar opacidad casi-cero: html2canvas
-  // "hornea" la opacidad dentro de la imagen capturada y el PDF queda prácticamente en blanco).
-  const container = document.createElement('div');
-  container.style.position = 'fixed';
-  container.style.top = '0';
-  container.style.left = '-99999px';   // fuera de la ventana visible, pero con opacidad 1
-  container.style.width = '800px';
-  container.style.background = '#ffffff';
-  container.style.opacity = '1';
-  container.style.pointerEvents = 'none';
-
-  const styleTag = document.createElement('style');
-  styleTag.textContent = styleBlock;
-  container.appendChild(styleTag);
-
-  const contentDiv = document.createElement('div');
-  contentDiv.id = 'pdf-cierre';
-  contentDiv.innerHTML = body;
-  container.appendChild(contentDiv);
-
-  document.body.appendChild(container);
-
-  const opt = {
-    margin:       0.5,
-    filename:     `Cierre_Jornada_${STATE.placa}_${new Date().toISOString().slice(0,10)}.pdf`,
-    image:        { type: 'jpeg', quality: 0.98 },
-    html2canvas:  {
-      scale: 2,
-      useCORS: true,
-      logging: false,
-      backgroundColor: '#ffffff',
-      windowWidth: 800,
-      windowHeight: container.scrollHeight
-    },
-    jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
-  };
-
-  try {
-    // Esperar a que el layout termine de calcularse antes de capturar
-    await new Promise(resolve => requestAnimationFrame(()=>requestAnimationFrame(resolve)));
-    await html2pdf().set(opt).from(container).save();
-    toast('✅ PDF generado correctamente');
-  } catch (e) {
-    console.error('Error generando PDF:', e);
-    toast('Error al generar el PDF: ' + e.message);
-  } finally {
-    document.body.removeChild(container);
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'letter' });
+  
+  // Datos
+  const fecha = STATE.horaInicio ? new Date(STATE.horaInicio).toLocaleDateString('es-CO') : new Date().toLocaleDateString('es-CO');
+  const turno = STATE.horaInicio ? (new Date(STATE.horaInicio).getHours() >= 6 && new Date(STATE.horaInicio).getHours() < 18 ? 'Diurno' : 'Nocturno') : '';
+  const mlTotal = calcularMLTotal();
+  const horas = STATE.horaInicio && STATE.horaFin ? round1((new Date(STATE.horaFin)-new Date(STATE.horaInicio))/3600000) : 0;
+  const m3Total = STATE.m3Total || 0;
+  
+  // Título
+  doc.setFontSize(16);
+  doc.setFont('helvetica', 'bold');
+  doc.text('HOJA DE CONTINGENCIA - JORNADA', 105, 15, { align: 'center' });
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`Generada: ${new Date().toLocaleString('es-CO')}`, 105, 20, { align: 'center' });
+  
+  // Nota importante
+  doc.setFontSize(9);
+  doc.setTextColor(255, 107, 53);
+  doc.setFont('helvetica', 'bold');
+  doc.text('IMPORTANTE - Dinámica de tramos:', 15, 30);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(0, 0, 0);
+  doc.text('Los tramos marcados como "Apto CCTV / LIMPIO" quedaron limpios y podrán ser', 15, 35);
+  doc.text('inspeccionados por el equipo CCTV. Los marcados como "No apto CCTV / NO LIMPIO"', 15, 39);
+  doc.text('no quedaron limpios y no podrán ser inspeccionados hasta trabajo adicional.', 15, 43);
+  
+  // Datos del turno
+  let y = 55;
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Datos del turno', 15, y);
+  doc.setFont('helvetica', 'normal');
+  y += 6;
+  const datosTurno = [
+    ['Fecha:', fecha],
+    ['Placa:', STATE.placa || '—'],
+    ['Jornada:', turno],
+    ['Barrio:', STATE.barrio || '—'],
+    ['Inspector:', STATE.inspector || '—'],
+    ['Hora inicio:', STATE.horaInicio ? fmtHora24(STATE.horaInicio) : '—'],
+    ['Hora fin:', STATE.horaFin ? fmtHora24(STATE.horaFin) : '—']
+  ];
+  datosTurno.forEach(([label, valor]) => {
+    doc.setFont('helvetica', 'bold');
+    doc.text(label, 15, y);
+    doc.setFont('helvetica', 'normal');
+    doc.text(valor, 45, y);
+    y += 5;
+  });
+  
+  // Tramos
+  y += 4;
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Tramos registrados', 15, y);
+  y += 5;
+  doc.setFontSize(9);
+  if (STATE.tramos.length === 0) {
+    doc.setFont('helvetica', 'normal');
+    doc.text('Sin tramos', 15, y);
+  } else {
+    // Encabezado de tabla
+    doc.setFont('helvetica', 'bold');
+    doc.text('#', 15, y);
+    doc.text('Código', 25, y);
+    doc.text('Hora', 55, y);
+    doc.text('Resultado', 80, y);
+    y += 4;
+    STATE.tramos.forEach((t, i) => {
+      doc.setFont('helvetica', 'normal');
+      doc.text(String(i+1), 15, y);
+      doc.text('#' + t.tramo, 25, y);
+      doc.text(t.horaInicio ? fmtHora24(t.horaInicio) : '', 55, y);
+      let resultado = '';
+      if (t.cierre) {
+        if (t.cierre.apto === 'SI') resultado = `LIMPIO -> ${t.cierre.ml} ML -> CCTV puede inspeccionar`;
+        else if (t.cierre.apto === 'NO') resultado = `NO LIMPIO -> ${t.cierre.obs || 'Sin observación'}`;
+        else resultado = `Cerrado por novedad -> ${t.cierre.obs || ''}`;
+      } else {
+        resultado = 'SIN CERRAR';
+      }
+      // Ajustar para que no se salga de la página
+      const maxWidth = 100;
+      const lines = doc.splitTextToSize(resultado, maxWidth);
+      doc.text(lines, 80, y);
+      y += Math.max(lines.length * 4, 4);
+    });
   }
+  
+  // Cierre
+  y += 6;
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Cierre', 15, y);
+  y += 6;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.text(`ML total (tramos limpios): ${mlTotal} ML`, 15, y);
+  y += 5;
+  doc.text(`Horas: ${horas} h`, 15, y);
+  y += 5;
+  doc.text(`M3: ${m3Total} m³`, 15, y);
+  y += 5;
+  doc.setFont('helvetica', 'bold');
+  doc.text(mlTotal >= META_ML ? 'Meta cumplida' : 'No cumplida', 15, y);
+  
+  // Firmas
+  y += 10;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.text('Firma: ______________________', 15, y);
+  doc.text('Este documento es respaldo del cierre.', 130, y);
+  
+  // Guardar PDF
+  doc.save(`Cierre_Jornada_${STATE.placa}_${new Date().toISOString().slice(0,10)}.pdf`);
+  toast('✅ PDF generado correctamente');
 }
 
 /* ==================== REINICIAR APP ==================== */
